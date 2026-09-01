@@ -31,7 +31,7 @@ A modern, secure, database-driven **Employee Management Portal** built with **St
 - **`db_manager.py`**: Backend database layer handling MySQL operations, user authentication, bcrypt hashing, and verified CRUD transactions.
 - **`db_config.py`**: MySQL connection credentials.
 - **`requirements.txt`**: Project dependencies (`streamlit`, `mysql-connector-python`, `pandas`, `bcrypt`).
-- **`test_auth_and_db.py`**: Automated test suite for authentication, role handling, and database operations.
+
 
 ---
 
@@ -71,12 +71,7 @@ The database automatically initializes a default administrator account on first 
    python db_manager.py
    ```
 
-4. **Run Automated Verification Tests (Optional)**:
-   ```bash
-   python test_auth_and_db.py
-   ```
 
----
 
 ## ▶️ Execution
 
