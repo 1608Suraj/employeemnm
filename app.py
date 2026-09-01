@@ -160,7 +160,27 @@ def main_app():
 
 def main():
     init_session()
-    db.init_db()
+
+    # Initialize DB once per session
+    if "db_initialized" not in st.session_state:
+        ok, msg = db.init_db()
+        st.session_state["db_initialized"] = ok
+        st.session_state["db_error"] = msg if not ok else None
+
+    if not st.session_state.get("db_initialized", False):
+        st.warning("⚠️ Could not connect to MySQL database. Please verify your connection or Streamlit Cloud Secrets.")
+        with st.expander("ℹ️ Streamlit Cloud Secrets Setup"):
+            st.markdown("""
+            Add your cloud database credentials in **App Settings → Secrets**:
+            ```toml
+            [mysql]
+            host = "your-host.aiven.io"
+            port = 3306
+            user = "avnadmin"
+            password = "your_password"
+            database = "defaultdb"
+            ```
+            """)
 
     if not st.session_state["authenticated"]:
         login_page()

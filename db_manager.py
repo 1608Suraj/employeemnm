@@ -45,7 +45,7 @@ def verify_password(password, hashed_password):
 
 
 def get_db_connection():
-    """Connect to the MySQL database."""
+    """Connect to the MySQL database with a 5-second timeout."""
     config = get_db_config()
     try:
         connection = mysql.connector.connect(
@@ -53,7 +53,8 @@ def get_db_connection():
             port=config.get('port', 3306),
             user=config['user'],
             password=config['password'],
-            database=config['database']
+            database=config['database'],
+            connect_timeout=5
         )
         if connection.is_connected():
             return connection
@@ -65,21 +66,23 @@ def get_db_connection():
 def init_db():
     """Initialize database tables and seed default admin user."""
     config = get_db_config()
-    # Try creating database if permission allows (e.g. local MySQL)
+
+    # If local database doesn't exist yet, try to create it
     try:
-        conn = mysql.connector.connect(
+        conn_server = mysql.connector.connect(
             host=config['host'],
             port=config.get('port', 3306),
             user=config['user'],
-            password=config['password']
+            password=config['password'],
+            connect_timeout=5
         )
-        if conn and conn.is_connected():
-            cursor = conn.cursor()
+        if conn_server and conn_server.is_connected():
+            cursor = conn_server.cursor()
             cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{config['database']}`")
             cursor.close()
-            conn.close()
+            conn_server.close()
     except Exception:
-        pass  # On managed cloud DBs, database already exists
+        pass  # On cloud MySQL, DB already exists or user has restricted permissions
 
     conn = get_db_connection()
     if conn:
@@ -117,12 +120,13 @@ def init_db():
 
             return True, "Database initialized."
         except Error as e:
-            print(f"Error initializing database: {e}")
+            print(f"Error initializing database tables: {e}")
             return False, str(e)
         finally:
-            cursor.close()
-            conn.close()
-    return False, "Failed to connect to MySQL."
+            if conn.is_connected():
+                cursor.close()
+                conn.close()
+    return False, "Failed to connect to MySQL database."
 
 
 # ==================== Authentication ====================
@@ -137,7 +141,7 @@ def create_user(username, password, role="admin"):
 
     conn = get_db_connection()
     if not conn:
-        return False, "Database connection failed."
+        return False, "Database connection failed. Please check MySQL settings."
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -154,8 +158,9 @@ def create_user(username, password, role="admin"):
     except Error as e:
         return False, f"Error: {e}"
     finally:
-        cursor.close()
-        conn.close()
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
 
 
 def authenticate_user(username, password):
@@ -187,7 +192,7 @@ def authenticate_user(username, password):
     except Error as e:
         return False, f"Error: {e}", None
     finally:
-        if conn.is_connected():
+        if conn and conn.is_connected():
             cursor.close()
             conn.close()
 
