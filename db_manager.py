@@ -1,7 +1,27 @@
 import mysql.connector
 from mysql.connector import Error
 import bcrypt
-from db_config import DB_CONFIG
+
+try:
+    from db_config import DB_CONFIG
+except ImportError:
+    import streamlit as st
+    try:
+        DB_CONFIG = {
+            'host': st.secrets["mysql"]["host"],
+            'port': int(st.secrets["mysql"].get("port", 3306)),
+            'user': st.secrets["mysql"]["user"],
+            'password': st.secrets["mysql"]["password"],
+            'database': st.secrets["mysql"]["database"]
+        }
+    except Exception:
+        DB_CONFIG = {
+            'host': 'localhost',
+            'port': 3306,
+            'user': 'root',
+            'password': 'root',
+            'database': 'employee_db'
+        }
 
 
 def hash_password(password):
@@ -17,26 +37,12 @@ def verify_password(password, hashed_password):
         return False
 
 
-def create_connection():
-    """Create a database connection to the MySQL server."""
-    try:
-        connection = mysql.connector.connect(
-            host=DB_CONFIG['host'],
-            user=DB_CONFIG['user'],
-            password=DB_CONFIG['password']
-        )
-        if connection.is_connected():
-            return connection
-    except Error as e:
-        print(f"Error connecting to MySQL: {e}")
-    return None
-
-
 def get_db_connection():
-    """Connect to the employee database."""
+    """Connect to the MySQL database."""
     try:
         connection = mysql.connector.connect(
             host=DB_CONFIG['host'],
+            port=DB_CONFIG.get('port', 3306),
             user=DB_CONFIG['user'],
             password=DB_CONFIG['password'],
             database=DB_CONFIG['database']
@@ -48,26 +54,28 @@ def get_db_connection():
     return None
 
 
-def check_db_health():
-    """Check if the database is reachable."""
-    try:
-        conn = get_db_connection()
-        if conn and conn.is_connected():
-            conn.close()
-            return True, "Connected"
-        return False, "Cannot connect to database."
-    except Exception as e:
-        return False, str(e)
-
-
 def init_db():
-    """Initialize database, tables, and seed default admin user."""
-    conn = create_connection()
+    """Initialize database tables and seed default admin user."""
+    # First try connecting without database to create it if local
+    try:
+        conn = mysql.connector.connect(
+            host=DB_CONFIG['host'],
+            port=DB_CONFIG.get('port', 3306),
+            user=DB_CONFIG['user'],
+            password=DB_CONFIG['password']
+        )
+        if conn and conn.is_connected():
+            cursor = conn.cursor()
+            cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{DB_CONFIG['database']}`")
+            cursor.close()
+            conn.close()
+    except Exception:
+        pass  # On managed cloud DBs, database usually already exists
+
+    conn = get_db_connection()
     if conn:
         try:
             cursor = conn.cursor()
-            cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{DB_CONFIG['database']}`")
-            cursor.execute(f"USE `{DB_CONFIG['database']}`")
 
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS employees (
@@ -98,7 +106,6 @@ def init_db():
                 )
                 conn.commit()
 
-            print("Database and tables initialized successfully.")
             return True, "Database initialized."
         except Error as e:
             print(f"Error initializing database: {e}")
@@ -143,14 +150,14 @@ def create_user(username, password, role="admin"):
 
 
 def authenticate_user(username, password):
-    """Authenticate user credentials. Returns (success, message, user_dict|None)."""
+    """Authenticate user credentials."""
     username = username.strip()
     if not username or not password:
         return False, "Please provide both username and password.", None
 
     conn = get_db_connection()
     if not conn:
-        return False, "Database connection failed.", None
+        return False, "Database connection failed. Please check MySQL server.", None
 
     try:
         cursor = conn.cursor(dictionary=True)
@@ -178,7 +185,7 @@ def authenticate_user(username, password):
 # ==================== Employee CRUD ====================
 
 def add_employee(name, position, salary):
-    """Add employee. Returns (success, message, new_id|None)."""
+    """Add employee."""
     conn = get_db_connection()
     if not conn:
         return False, "Database connection failed.", None
@@ -199,7 +206,7 @@ def add_employee(name, position, salary):
 
 
 def remove_employee(emp_id):
-    """Remove employee by ID. Returns (success, message)."""
+    """Remove employee by ID."""
     conn = get_db_connection()
     if not conn:
         return False, "Database connection failed."
@@ -220,7 +227,7 @@ def remove_employee(emp_id):
 
 
 def promote_employee(emp_id, new_position, new_salary):
-    """Update employee position and salary. Returns (success, message)."""
+    """Update employee position and salary."""
     conn = get_db_connection()
     if not conn:
         return False, "Database connection failed."

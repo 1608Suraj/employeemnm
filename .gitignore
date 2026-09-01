@@ -28,4 +28,3 @@ Desktop.ini
 
 # Environment / Secrets
 .env
-db_config.py
