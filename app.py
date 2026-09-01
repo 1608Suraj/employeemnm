@@ -1,5 +1,10 @@
+import os
+import sys
 import streamlit as st
 import pandas as pd
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 import db_manager as db
 
 st.set_page_config(page_title="Employee Management System", layout="wide")

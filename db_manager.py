@@ -1,27 +1,34 @@
+import os
+import sys
 import mysql.connector
 from mysql.connector import Error
 import bcrypt
+import streamlit as st
 
-try:
-    from db_config import DB_CONFIG
-except ImportError:
-    import streamlit as st
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+
+def get_db_config():
+    """Retrieve DB credentials from Streamlit secrets, environment, or localhost defaults."""
     try:
-        DB_CONFIG = {
-            'host': st.secrets["mysql"]["host"],
-            'port': int(st.secrets["mysql"].get("port", 3306)),
-            'user': st.secrets["mysql"]["user"],
-            'password': st.secrets["mysql"]["password"],
-            'database': st.secrets["mysql"]["database"]
-        }
+        if hasattr(st, "secrets") and "mysql" in st.secrets:
+            return {
+                'host': st.secrets["mysql"]["host"],
+                'port': int(st.secrets["mysql"].get("port", 3306)),
+                'user': st.secrets["mysql"]["user"],
+                'password': str(st.secrets["mysql"]["password"]),
+                'database': st.secrets["mysql"]["database"]
+            }
     except Exception:
-        DB_CONFIG = {
-            'host': 'localhost',
-            'port': 3306,
-            'user': 'root',
-            'password': 'root',
-            'database': 'employee_db'
-        }
+        pass
+
+    return {
+        'host': os.getenv('DB_HOST', 'localhost'),
+        'port': int(os.getenv('DB_PORT', 3306)),
+        'user': os.getenv('DB_USER', 'root'),
+        'password': os.getenv('DB_PASSWORD', 'root'),
+        'database': os.getenv('DB_NAME', 'employee_db')
+    }
 
 
 def hash_password(password):
@@ -39,13 +46,14 @@ def verify_password(password, hashed_password):
 
 def get_db_connection():
     """Connect to the MySQL database."""
+    config = get_db_config()
     try:
         connection = mysql.connector.connect(
-            host=DB_CONFIG['host'],
-            port=DB_CONFIG.get('port', 3306),
-            user=DB_CONFIG['user'],
-            password=DB_CONFIG['password'],
-            database=DB_CONFIG['database']
+            host=config['host'],
+            port=config.get('port', 3306),
+            user=config['user'],
+            password=config['password'],
+            database=config['database']
         )
         if connection.is_connected():
             return connection
@@ -56,21 +64,22 @@ def get_db_connection():
 
 def init_db():
     """Initialize database tables and seed default admin user."""
-    # First try connecting without database to create it if local
+    config = get_db_config()
+    # Try creating database if permission allows (e.g. local MySQL)
     try:
         conn = mysql.connector.connect(
-            host=DB_CONFIG['host'],
-            port=DB_CONFIG.get('port', 3306),
-            user=DB_CONFIG['user'],
-            password=DB_CONFIG['password']
+            host=config['host'],
+            port=config.get('port', 3306),
+            user=config['user'],
+            password=config['password']
         )
         if conn and conn.is_connected():
             cursor = conn.cursor()
-            cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{DB_CONFIG['database']}`")
+            cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{config['database']}`")
             cursor.close()
             conn.close()
     except Exception:
-        pass  # On managed cloud DBs, database usually already exists
+        pass  # On managed cloud DBs, database already exists
 
     conn = get_db_connection()
     if conn:
@@ -178,8 +187,9 @@ def authenticate_user(username, password):
     except Error as e:
         return False, f"Error: {e}", None
     finally:
-        cursor.close()
-        conn.close()
+        if conn.is_connected():
+            cursor.close()
+            conn.close()
 
 
 # ==================== Employee CRUD ====================
@@ -201,8 +211,9 @@ def add_employee(name, position, salary):
     except Error as e:
         return False, f"Error adding employee: {e}", None
     finally:
-        cursor.close()
-        conn.close()
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
 
 
 def remove_employee(emp_id):
@@ -222,8 +233,9 @@ def remove_employee(emp_id):
     except Error as e:
         return False, f"Error: {e}"
     finally:
-        cursor.close()
-        conn.close()
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
 
 
 def promote_employee(emp_id, new_position, new_salary):
@@ -246,8 +258,9 @@ def promote_employee(emp_id, new_position, new_salary):
     except Error as e:
         return False, f"Error: {e}"
     finally:
-        cursor.close()
-        conn.close()
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
 
 
 def get_employee_by_id(emp_id):
@@ -264,8 +277,9 @@ def get_employee_by_id(emp_id):
         print(f"Error: {e}")
         return None
     finally:
-        cursor.close()
-        conn.close()
+        if conn and conn.is_connected():
+            cursor.close()
+            conn.close()
 
 
 def get_all_employees():
@@ -280,8 +294,9 @@ def get_all_employees():
         except Error as e:
             print(f"Error fetching employees: {e}")
         finally:
-            cursor.close()
-            conn.close()
+            if conn and conn.is_connected():
+                cursor.close()
+                conn.close()
     return employees
 
 
